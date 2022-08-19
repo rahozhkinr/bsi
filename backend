@@ -1,0 +1,55 @@
+# Param(
+#       [string]$org_url = "https://dev.azure.com/",
+#       [string]$project = "BackUpDevOpsADO",
+#       [string]$pat = "PATforBackup"
+#        )
+
+# az login
+
+
+$PAT = ''
+$ADOAuthenicationHeader = @{Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($PAT)")) }
+
+$OrganizationName = ""
+$UriOrganization = "https://dev.azure.com/$($OrganizationName)/"
+$ProjectName = "BackUpDevOpsADO"
+$WorkItemType = "task"
+
+#List projects
+#$UriAccount = $UriOrganization + "_apis/projects?api-version=6.0"
+#Invoke-RestMethod -Uri $UriAccount -Method Get -Headers $ADOAuthenicationHeader 
+
+#List work item task
+#$UriWorkItems = $UriOrganization + $ProjectName + "/_apis/wit/workitems/$" + $WorkItemType + "?api-version=6.0"
+#$UriWorkItems = $UriOrganization + $ProjectName + "/_apis/wit/workitemsbatch?api-version=6.0"
+#Invoke-RestMethod -Uri $UriWorkItems -Method POST -Headers $ADOAuthenicationHeader -ContentType "application/json"
+
+$UriWorkItems = $UriOrganization + $ProjectName + "/_apis/wit/wiql?api-version=5.0"
+$request = @{  
+    "query" = "Select [System.Id], [System.Title], [System.State] From WorkItems Where [System.WorkItemType] = 'Task' order by [Microsoft.VSTS.Common.Priority] asc, [System.CreatedDate] desc "
+}
+$requestJson = $request | ConvertTo-Json
+
+# $body="[
+#   {
+#     `"op`": `"add`",
+#     `"path`": `"/fields/System.Title`",
+#     `"value`": `"$($WorkItemTitle)`"
+#   }
+# ]"
+
+# $request = @'
+# {
+#       "query": "SELECT [System.Id], [System.WorkItemType],  [System.State],[System.AreaPath],[System.Tags],[System.CommentCount],[System.ChangedDate] FROM workitems WHERE[System.Id] IN(@MyRecentActivity) AND [System.TeamProject] = 'Azure' AND [System.State] <> '' ORDER BY [System.ChangedDate] DESC"
+# }
+# '@
+
+Invoke-RestMethod -Method Post -ContentType application/json -Uri $UriWorkItems -Headers $ADOAuthenicationHeader -Body $requestJson -OutFile workitems.json
+$witJson = ConvertFrom-Json "$(Get-Content workitems.json)"
+
+$workItems = $(foreach ($wit in $witJson.workItems)
+{
+    $idNumber = $wit.id
+    $urlWorkItem = $wit.url
+    Invoke-RestMethod -ContentType application/json -Uri "$urlWorkItem" -Headers $ADOAuthenicationHeader -OutFile "./tasks/workItem$idNumber"
+})
