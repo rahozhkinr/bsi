@@ -1,12 +1,3 @@
-# Param(
-#       [string]$org_url = "https://dev.azure.com/",
-#       [string]$project = "BackUpDevOpsADO",
-#       [string]$pat = "PATforBackup"
-#        )
-
-# az login
-
-
 $PAT = ''
 $ADOAuthenicationHeader = @{Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($PAT)")) }
 
@@ -26,30 +17,36 @@ $WorkItemType = "task"
 
 $UriWorkItems = $UriOrganization + $ProjectName + "/_apis/wit/wiql?api-version=5.0"
 $request = @{  
-    "query" = "Select [System.Id], [System.Title], [System.State] From WorkItems Where [System.WorkItemType] = 'Task' order by [Microsoft.VSTS.Common.Priority] asc, [System.CreatedDate] desc "
+    "query" = "Select [System.Id], [System.Title], [System.State], [System.Tags] From WorkItems Where [System.WorkItemType] = 'Task' order by [Microsoft.VSTS.Common.Priority] asc, [System.CreatedDate] desc "
 }
 $requestJson = $request | ConvertTo-Json
-
-# $body="[
-#   {
-#     `"op`": `"add`",
-#     `"path`": `"/fields/System.Title`",
-#     `"value`": `"$($WorkItemTitle)`"
-#   }
-# ]"
-
-# $request = @'
-# {
-#       "query": "SELECT [System.Id], [System.WorkItemType],  [System.State],[System.AreaPath],[System.Tags],[System.CommentCount],[System.ChangedDate] FROM workitems WHERE[System.Id] IN(@MyRecentActivity) AND [System.TeamProject] = 'Azure' AND [System.State] <> '' ORDER BY [System.ChangedDate] DESC"
-# }
-# '@
 
 Invoke-RestMethod -Method Post -ContentType application/json -Uri $UriWorkItems -Headers $ADOAuthenicationHeader -Body $requestJson -OutFile workitems.json
 $witJson = ConvertFrom-Json "$(Get-Content workitems.json)"
 
+Write-Host "Downloading data of tasks and creating JSON files for each task"
+$count = 0
 $workItems = $(foreach ($wit in $witJson.workItems)
 {
+    if ($count -eq 5){
+        break
+    }
+    $count++
     $idNumber = $wit.id
-    $urlWorkItem = $wit.url
-    Invoke-RestMethod -ContentType application/json -Uri "$urlWorkItem" -Headers $ADOAuthenicationHeader -OutFile "./tasks/workItem$idNumber"
+    $urlTemp = $wit.url
+    $urlWorkItem = "$urlTemp`?`$expand=all"
+    #Write-Host 'Field name: '$wit
+    Invoke-RestMethod -ContentType application/json -Method GET -Uri "$urlWorkItem" -Headers $ADOAuthenicationHeader -OutFile "./tasks/workItem$idNumber"
+    $dataWorkItemJson = ConvertFrom-Json "$(Get-Content ./tasks/workItem$idNumber)"
+    Write-Host "Relations: " $dataWorkItemJson.relations.rel
+
+    $numberAttach = 0
+    foreach($relation in $dataWorkItemJson.relations){
+        if($relation.rel -eq "AttachedFile"){
+            $numberAttach++
+            $attachUrl = $relation.url
+            Write-Host "Downloading from: "$attachUrl
+            Invoke-WebRequest -Uri "$attachUrl" -Headers $ADOAuthenicationHeader -OutFile ./tasks/attach$idNumber"_"$numberAttach
+        }
+    }
 })
