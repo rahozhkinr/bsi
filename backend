@@ -1,9 +1,9 @@
-$PAT = 'bijejtfekyff4dbbui7avywubti2ywkgjwoio254ltijebovrbqa'
+$PAT = ''
 $ADOAuthenicationHeader = @{Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($PAT)")) }
 
-$OrganizationName = "RuslanRahozhkin"
+$OrganizationName = ""
 $UriOrganization = "https://dev.azure.com/$($OrganizationName)/"
-$ProjectName = "BackUpDevOpsADO"
+$ProjectName = ""
 $WorkItemType = "task"
 
 #List projects
