@@ -16,9 +16,11 @@ $WorkItemType = "task"
 #Invoke-RestMethod -Uri $UriWorkItems -Method POST -Headers $ADOAuthenicationHeader -ContentType "application/json"
 
 $UriWorkItems = $UriOrganization + $ProjectName + "/_apis/wit/wiql?api-version=5.0"
-Write-Host 'UriWorkItems: ' $UriWorkItems
 $request = @{  
-    "query" = "Select [System.Id], [System.Title], [System.State], [System.Tags], [System.TeamProject] From WorkItems Where [System.TeamProject] = 'BackUpDevOpsADO' and [System.WorkItemType] = 'Task' order by [Microsoft.VSTS.Common.Priority] asc, [System.CreatedDate] desc "
+    "query" = "
+    Select [System.Id], [System.Title], [System.State], [System.Tags], [System.TeamProject]
+    From WorkItems 
+    Where [System.TeamProject] = 'BackUpDevOpsADO' and [System.WorkItemType] = 'Task' and [System.State] <> '' "
 }
 $requestJson = $request | ConvertTo-Json
 
@@ -36,16 +38,10 @@ $workItems = $(foreach ($wit in $witJson.workItems)
     $idNumber = $wit.id
     $urlTemp = $wit.url
     $urlWorkItem = "$urlTemp`?`$expand=all"
-    Write-Host 'urlWorkItem of each work item: ' $urlWorkItem
-    Invoke-RestMethod -ContentType application/json -Method GET -Uri "$urlWorkItem" -Headers $ADOAuthenicationHeader -OutFile "./tasks/workItem$idNumber"
-    $dataWorkItemJson = ConvertFrom-Json "$(Get-Content ./tasks/workItem$idNumber)"
+    Invoke-RestMethod -ContentType application/json -Method GET -Uri "$urlWorkItem" -Headers $ADOAuthenicationHeader -OutFile "./tasks/workItem$idNumber.json"
+    $dataWorkItemJson = ConvertFrom-Json "$(Get-Content ./tasks/workItem$idNumber.json)"
     Write-Host "Relations: " $dataWorkItemJson.relations.rel
     Write-Host 'Project: ' $dataWorkItemJson.fields.'System.TeamProject'
-
-    if($dataWorkItemJson.fields.'System.TeamProject' -eq "BackUpDevOpsADO"){
-        Write-Host "That's BackUpDevOpsADO project work items"
-
-    }
 
     $numberAttach = 0
     foreach($relation in $dataWorkItemJson.relations){
@@ -53,14 +49,20 @@ $workItems = $(foreach ($wit in $witJson.workItems)
             $numberAttach++
             $attachUrl = $relation.url
             Write-Host "Downloading attaches from: "$attachUrl
-            Invoke-WebRequest -Uri "$attachUrl" -Headers $ADOAuthenicationHeader -OutFile ./tasks/attach$idNumber"_"$numberAttach
+            Invoke-WebRequest -Uri "$attachUrl" -Headers $ADOAuthenicationHeader -OutFile ./tasks/attach$idNumber"_"$numberAttach.json
         }
     }
 
     Write-Host $dataWorkItemJson._links.workItemComments
     $commentUrl = $dataWorkItemJson._links.workItemComments.href
     Write-Host "Downloading comments from: "$commentUrl
-    Invoke-RestMethod -ContentType application/json -Method GET -Uri "$commentUrl" -Headers $ADOAuthenicationHeader -OutFile ./tasks/comment$idNumber
+    Invoke-RestMethod -ContentType application/json -Method GET -Uri "$commentUrl" -Headers $ADOAuthenicationHeader -OutFile ./tasks/comment$idNumber.json
 })
 
+#((Get-Content -Path ./tasks/workItem300.json -Raw) | ConvertFrom-Json) | ConvertTo-Csv | Set-Content ./tasks-csv/workItem300.csv
 Compress-Archive -Path ./tasks -DestinationPath tasks.zip -Update
+
+# $Trigger= New-ScheduledTaskTrigger -At 04:00pm -Daily # Specify the trigger settings
+# $User= "ruslan_rahozhkin" # Specify the account to run the script
+# $Action= New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "/Users/ruslan_rahozhkin/Documents/BSI/BackUpTask/Backup_ado.ps1" # Specify what program to run and with its parameters
+# Register-ScheduledTask -TaskName "BackupWorkItemsADO" -Trigger $Trigger -User $User -Action $Action -RunLevel Highest #–Force # Specify the name of the task
